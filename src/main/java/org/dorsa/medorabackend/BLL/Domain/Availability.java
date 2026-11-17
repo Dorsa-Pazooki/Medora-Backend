@@ -12,17 +12,19 @@ public class Availability {
 
     public  Availability (LocalTime startTime,LocalTime endTime,DayOfWeek day){
 
-        if (!startTime.isBefore(endTime)){
-            throw new IllegalArgumentException("start time must be before endtime");
-        }
-
         if (startTime == null||endTime== null || day==null){
             throw new IllegalArgumentException("availability fields cannot be null");
         }
 
-        startTime = startTime;
-        endTime = endTime;
-        day = day;
+        if (!startTime.isBefore(endTime)){
+            throw new IllegalArgumentException("start time must be before endtime");
+        }
+
+
+
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.day = day;
 
 
     }
