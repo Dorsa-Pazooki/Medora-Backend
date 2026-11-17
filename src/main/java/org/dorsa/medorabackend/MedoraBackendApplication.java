@@ -1,4 +1,4 @@
-package org.example.medorabackend;
+package org.dorsa.medorabackend;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
