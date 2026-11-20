@@ -1,18 +1,22 @@
+
 package org.dorsa.medorabackend.BLL.Services;
 
 import org.dorsa.medorabackend.BLL.Domain.Availability;
 import org.dorsa.medorabackend.BLL.Domain.Schedule;
-import org.dorsa.medorabackend.BLL.Interfaces.AvailabilityRepository;
+import org.dorsa.medorabackend.DAL.Entities.AvailabilityEntity;
+import org.dorsa.medorabackend.DAL.Repository.JpaAvailabilityRepository;
+
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 public class AvailabilityService {
 
-    private final AvailabilityRepository repository;
+    private final JpaAvailabilityRepository repository;
 
-    public AvailabilityService(AvailabilityRepository repository) {
+    public AvailabilityService(JpaAvailabilityRepository repository) {
         this.repository = repository;
     }
 
@@ -20,20 +24,43 @@ public class AvailabilityService {
         validateDoctorId(doctorId);
 
         return repository.findByDoctorId(doctorId)
-                .map(Schedule::getAvailabilities)
-                .orElseGet(List::of);
+                .stream()
+                .map(entity -> new Availability(
+                        entity.getStartTime(),
+                        entity.getEndTime(),
+                        entity.getDay()
+                ))
+                .toList();
     }
 
-    public void registerAvailability(Long doctorId, Availability availability) {
+    @Transactional
+    public void registerAvailability(
+            Long doctorId,
+            Availability availability
+    ) {
         validateDoctorId(doctorId);
 
-        Schedule schedule = repository.findByDoctorId(doctorId)
-                .orElseGet(Schedule::new);
+        if (availability == null) {
+            throw new IllegalArgumentException(
+                    "Availability cannot be null"
+            );
+        }
+
+        Schedule schedule = loadSchedule(doctorId);
 
         schedule.addAvailability(availability);
-        repository.save(doctorId, schedule);
+
+        AvailabilityEntity entity = new AvailabilityEntity(
+                doctorId,
+                availability.getDay(),
+                availability.getStartTime(),
+                availability.getEndTime()
+        );
+
+        repository.save(entity);
     }
 
+    @Transactional
     public void updateAvailability(
             Long doctorId,
             Availability oldAvailability,
@@ -41,27 +68,79 @@ public class AvailabilityService {
     ) {
         validateDoctorId(doctorId);
 
-        Schedule existing = repository.findByDoctorId(doctorId)
-                .orElseThrow(() ->
-                        new IllegalArgumentException("Schedule not found")
-                );
-
-        // Work on a copy so a failed update does not change the loaded schedule.
-        Schedule updated = new Schedule();
-
-        for (Availability period : existing.getAvailabilities()) {
-            updated.addAvailability(period);
+        if (oldAvailability == null || newAvailability == null) {
+            throw new IllegalArgumentException(
+                    "Availability cannot be null"
+            );
         }
 
-        updated.removeAvailability(oldAvailability);
-        updated.addAvailability(newAvailability);
+        Schedule schedule = loadSchedule(doctorId);
 
-        repository.save(doctorId, updated);
+        // Check that the old period exists.
+        schedule.removeAvailability(oldAvailability);
+
+        // Check that the new period does not overlap.
+        schedule.addAvailability(newAvailability);
+
+        // Find the existing database record.
+        AvailabilityEntity existingEntity =
+                repository.findByDoctorId(doctorId)
+                        .stream()
+                        .filter(entity ->
+                                entity.getDay() == oldAvailability.getDay()
+                                        && entity.getStartTime().equals(
+                                        oldAvailability.getStartTime()
+                                )
+                                        && entity.getEndTime().equals(
+                                        oldAvailability.getEndTime()
+                                )
+                        )
+                        .findFirst()
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Availability not found"
+                                )
+                        );
+
+        // Remove the old record.
+        repository.delete(existingEntity);
+
+        // Save the new record.
+        AvailabilityEntity updatedEntity = new AvailabilityEntity(
+                doctorId,
+                newAvailability.getDay(),
+                newAvailability.getStartTime(),
+                newAvailability.getEndTime()
+        );
+
+        repository.save(updatedEntity);
+    }
+
+    private Schedule loadSchedule(Long doctorId) {
+        Schedule schedule = new Schedule();
+
+        List<AvailabilityEntity> entities =
+                repository.findByDoctorId(doctorId);
+
+        for (AvailabilityEntity entity : entities) {
+
+            Availability availability = new Availability(
+                    entity.getStartTime(),
+                    entity.getEndTime(),
+                    entity.getDay()
+            );
+
+            schedule.addAvailability(availability);
+        }
+
+        return schedule;
     }
 
     private void validateDoctorId(Long doctorId) {
         if (doctorId == null || doctorId <= 0) {
-            throw new IllegalArgumentException("Invalid doctor ID");
+            throw new IllegalArgumentException(
+                    "Invalid doctor ID"
+            );
         }
     }
 }

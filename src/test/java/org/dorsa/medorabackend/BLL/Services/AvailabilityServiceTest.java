@@ -1,26 +1,28 @@
+
 package org.dorsa.medorabackend.BLL.Services;
 
 import org.dorsa.medorabackend.BLL.Domain.Availability;
-import org.dorsa.medorabackend.BLL.Domain.Schedule;
-import org.dorsa.medorabackend.BLL.Interfaces.AvailabilityRepository;
+import org.dorsa.medorabackend.DAL.Entities.AvailabilityEntity;
+import org.dorsa.medorabackend.DAL.Repository.JpaAvailabilityRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
-import java.util.Optional;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class AvailabilityServiceTest {
 
-    private AvailabilityRepository repository;
+    private JpaAvailabilityRepository repository;
     private AvailabilityService service;
 
     @BeforeEach
     void setUp() {
-        repository = mock(AvailabilityRepository.class);
+        repository = mock(JpaAvailabilityRepository.class);
         service = new AvailabilityService(repository);
     }
 
@@ -29,7 +31,7 @@ class AvailabilityServiceTest {
         Long doctorId = 1L;
 
         when(repository.findByDoctorId(doctorId))
-                .thenReturn(Optional.empty());
+                .thenReturn(List.of());
 
         Availability availability = new Availability(
                 LocalTime.of(9, 0),
@@ -39,8 +41,10 @@ class AvailabilityServiceTest {
 
         service.registerAvailability(doctorId, availability);
 
-        verify(repository).save(eq(doctorId), argThat(schedule ->
-                schedule.getAvailabilities().size() == 1
+        verify(repository).save(argThat(entity ->
+                entity.getDoctorId().equals(doctorId)
+                        && entity.getDay() == DayOfWeek.MONDAY
+                        && entity.getStartTime().equals(LocalTime.of(9, 0))
         ));
     }
 
@@ -48,15 +52,15 @@ class AvailabilityServiceTest {
     void shouldRejectOverlappingAvailability() {
         Long doctorId = 1L;
 
-        Schedule schedule = new Schedule();
-        schedule.addAvailability(new Availability(
+        AvailabilityEntity existing = new AvailabilityEntity(
+                doctorId,
+                DayOfWeek.MONDAY,
                 LocalTime.of(9, 0),
-                LocalTime.of(12, 0),
-                DayOfWeek.MONDAY
-        ));
+                LocalTime.of(12, 0)
+        );
 
         when(repository.findByDoctorId(doctorId))
-                .thenReturn(Optional.of(schedule));
+                .thenReturn(List.of(existing));
 
         Availability overlapping = new Availability(
                 LocalTime.of(11, 0),
@@ -68,13 +72,13 @@ class AvailabilityServiceTest {
                 service.registerAvailability(doctorId, overlapping)
         );
 
-        verify(repository, never()).save(anyLong(), any(Schedule.class));
+        verify(repository, never()).save(any(AvailabilityEntity.class));
     }
 
     @Test
     void shouldReturnEmptyListWhenScheduleDoesNotExist() {
         when(repository.findByDoctorId(1L))
-                .thenReturn(Optional.empty());
+                .thenReturn(List.of());
 
         assertTrue(service.getAvailability(1L).isEmpty());
     }
@@ -95,18 +99,24 @@ class AvailabilityServiceTest {
                 DayOfWeek.MONDAY
         );
 
-        Schedule schedule = new Schedule();
-        schedule.addAvailability(oldPeriod);
+        AvailabilityEntity existing = new AvailabilityEntity(
+                doctorId,
+                DayOfWeek.MONDAY,
+                LocalTime.of(9, 0),
+                LocalTime.of(12, 0)
+        );
 
         when(repository.findByDoctorId(doctorId))
-                .thenReturn(Optional.of(schedule));
+                .thenReturn(List.of(existing));
 
         service.updateAvailability(doctorId, oldPeriod, newPeriod);
 
-        verify(repository).save(eq(doctorId), argThat(updated ->
-                updated.getAvailabilities().size() == 1
-                        && updated.getAvailabilities().get(0)
-                        .getStartTime().equals(LocalTime.of(10, 0))
+        verify(repository).delete(existing);
+
+        verify(repository).save(argThat(entity ->
+                entity.getDoctorId().equals(doctorId)
+                        && entity.getStartTime().equals(LocalTime.of(10, 0))
+                        && entity.getEndTime().equals(LocalTime.of(13, 0))
         ));
     }
 }
