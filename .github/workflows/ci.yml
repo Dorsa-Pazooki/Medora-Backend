@@ -1,9 +1,8 @@
+
 name: Medora Backend CI
 
 on:
   push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
@@ -14,6 +13,26 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: medora
+          POSTGRES_USER: medora
+          POSTGRES_PASSWORD: medora_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medora -d medora"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/medora
+      SPRING_DATASOURCE_USERNAME: medora
+      SPRING_DATASOURCE_PASSWORD: medora_test_password
 
     steps:
       - name: Get repository code
@@ -29,4 +48,4 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build and test
-        run: ./gradlew build
+        run: ./gradlew clean build
