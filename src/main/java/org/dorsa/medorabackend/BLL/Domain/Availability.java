@@ -2,6 +2,7 @@ package org.dorsa.medorabackend.BLL.Domain;
 
 import java.time.LocalTime;
 import java.time.DayOfWeek;
+import java.util.Objects;
 
 
 
@@ -29,8 +30,26 @@ public class Availability {
 
     }
 
+    public LocalTime getStartTime() {
+        return startTime;
+    }
 
+    public LocalTime getEndTime() {
+        return endTime;
+    }
 
+    public DayOfWeek getDay() {
+        return day;
+    }
 
+    public boolean overlapsWith(Availability other) {
+        Objects.requireNonNull(other, "Other availability cannot be null");
 
+        if (this.day != other.day) {
+            return false;
+        }
+
+        return this.startTime.isBefore(other.endTime)
+                && other.startTime.isBefore(this.endTime);
+    }
 }
